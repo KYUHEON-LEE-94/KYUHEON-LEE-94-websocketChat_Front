@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { over } from 'stompjs';
 import SockJS from 'sockjs-client';
 
-var stompClient = null;
+let stompClient = null;
 const ChatRoom = () => {
     const [privateChats, setPrivateChats] = useState(new Map());
     const [publicChats, setPublicChats] = useState([]);
@@ -13,15 +13,12 @@ const ChatRoom = () => {
         connected: false,
         message: ''
     });
+
     useEffect(() => {
         console.log(userData);
     }, [userData]);
 
-    const connect = () => {
-        let Sock = new SockJS('http://localhost:8080/ws');
-        stompClient = over(Sock);
-        stompClient.connect({}, onConnected, onError);
-    }
+
 
     const onConnected = () => {
         setUserData({ ...userData, "connected": true });
@@ -31,7 +28,7 @@ const ChatRoom = () => {
     }
 
     const userJoin = () => {
-        var chatMessage = {
+        let chatMessage = {
             senderName: userData.username,
             status: "JOIN"
         };
@@ -39,15 +36,22 @@ const ChatRoom = () => {
     }
 
     const onMessageReceived = (payload) => {
-        var payloadData = JSON.parse(payload.body);
+        console.log(`onMessageReceived payload: ${payload}`)
+        let payloadData = JSON.parse(payload.body);
         switch (payloadData.status) {
             case "JOIN":
                 if (!privateChats.get(payloadData.senderName)) {
                     privateChats.set(payloadData.senderName, []);
                     setPrivateChats(new Map(privateChats));
                 }
+                publicChats.push(payloadData);
+                setPublicChats([...publicChats]);
                 break;
             case "MESSAGE":
+                publicChats.push(payloadData);
+                setPublicChats([...publicChats]);
+                break;
+            case "LEAVE":
                 publicChats.push(payloadData);
                 setPublicChats([...publicChats]);
                 break;
@@ -92,7 +96,7 @@ const ChatRoom = () => {
 
     const sendPrivateValue = () => {
         if (stompClient) {
-            var chatMessage = {
+            let chatMessage = {
                 senderName: userData.username,
                 receiverName: tab,
                 message: userData.message,
@@ -116,6 +120,34 @@ const ChatRoom = () => {
     const registerUser = () => {
         connect();
     }
+
+    function handleKeyPress(event) {
+        if (event.key === 'Enter') {
+            registerUser();
+        }
+    }
+
+    const connect = () => {
+        let Sock = new SockJS('http://localhost:8080/ws');
+        stompClient = over(Sock);
+        stompClient.connect({}, onConnected, onError);
+    }
+
+    //창닫음 이벤트 중복 방지
+    if (stompClient && !window.beforeUnloadEventHandlerAdded) {
+        window.beforeUnloadEventHandlerAdded = true;
+        window.addEventListener('beforeunload', function (event) {
+            let chatMessage = {
+                senderName: userData.username,
+                receiverName: "CHATROOM",
+                status: "LEAVE"
+            };
+            // 서버로 메시지 전송
+            stompClient.send("/chatroom/public", {}, JSON.stringify(chatMessage));
+        });
+    }
+
+
     return (
         <div className="container">
             {userData.connected ?
@@ -124,17 +156,35 @@ const ChatRoom = () => {
                         <ul>
                             <li onClick={() => { setTab("CHATROOM") }} className={`member ${tab === "CHATROOM" && "active"}`}>Chatroom</li>
                             {[...privateChats.keys()].map((name, index) => (
-                                <li onClick={() => { setTab(name) }} className={`member ${tab === name && "active"}`} key={index}>{name}</li>
+                                <li onClick={() => { setTab(name) }} className={`member ${tab === name && "active"} ${name === userData.username && "hide"}`} key={index}>{name}</li>
                             ))}
                         </ul>
                     </div>
                     {tab === "CHATROOM" && <div className="chat-content">
                         <ul className="chat-messages">
                             {publicChats.map((chat, index) => (
+
                                 <li className={`message ${chat.senderName === userData.username && "self"}`} key={index}>
-                                    {chat.senderName !== userData.username && <div className="avatar">{chat.senderName}</div>}
+                                    {chat.status === "JOIN" && (
+                                        // JOIN 상태인 경우에 대한 UI 처리
+                                        <div className="join-message">{chat.senderName}님이 채팅방에 참여하셨습니다.</div>
+                                    )}
+
+                                    {chat.senderName !== userData.username && chat.status === "LEAVE" && (
+                                        // JOIN 상태인 경우에 대한 UI 처리
+                                        <div className="leave-message">{chat.senderName} 님이 채팅방을 떠났습니다.</div>
+                                    )}
+
+                                    {chat.senderName !== userData.username && chat.status !== "JOIN" && chat.status !== "LEAVE" && (
+                                        // 상대방의 메시지인 경우
+                                        <div className="avatar">{chat.senderName}</div>
+                                    )}
+
                                     <div className="message-data">{chat.message}</div>
-                                    {chat.senderName === userData.username && <div className="avatar self">{chat.senderName}</div>}
+                                    {chat.senderName === userData.username && chat.status !== "JOIN" && (
+                                        // 자신의 메시지인 경우
+                                        <div className="avatar self">{chat.senderName}</div>
+                                    )}
                                 </li>
                             ))}
                         </ul>
@@ -169,6 +219,7 @@ const ChatRoom = () => {
                         name="userName"
                         value={userData.username}
                         onChange={handleUsername}
+                        onKeyDown={handleKeyPress}
                         margin="normal"
                     />
                     <button type="button" onClick={registerUser}>

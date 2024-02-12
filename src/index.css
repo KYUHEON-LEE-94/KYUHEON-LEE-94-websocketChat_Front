@@ -134,3 +134,7 @@ ul {
 .message.self {
   justify-content: end;
 }
+
+.hide {
+  display: none;
+}

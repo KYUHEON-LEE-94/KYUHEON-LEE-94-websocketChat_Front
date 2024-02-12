@@ -1,5 +1,5 @@
 import React from 'react'
-import ChatRoom from './common/ChatRoom'
+import ChatRoom from './component/ChatRoom'
 
 const App = () => {
   return (
