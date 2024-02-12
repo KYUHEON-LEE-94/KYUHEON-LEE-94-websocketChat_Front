@@ -3,7 +3,7 @@
 - sockJS
 - stompJS
 
-## 프론트 부분
+## 백엔드 부분
 https://github.com/KYUHEON-LEE-94/websocketChat
 
 ## 예시 화면
